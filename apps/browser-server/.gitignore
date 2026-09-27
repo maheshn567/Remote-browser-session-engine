@@ -1,0 +1,19 @@
+node_modules
+out
+dist
+*.tgz
+coverage
+*.lcov
+logs
+*.log
+.eslintcache
+.cache
+*.tsbuildinfo
+.idea
+.DS_Store
+
+.env
+.env.local
+
+# Captured auth sessions — literal live session tokens. Never commit these.
+sessions/

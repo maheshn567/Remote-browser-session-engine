@@ -1,0 +1,19 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.log
+*.tsbuildinfo
+.DS_Store
+.idea/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Captured auth sessions — live session tokens. Never commit these.
+apps/browser-server/sessions/
+apps/frontend/CLAUDE.md
+apps/frontend/AGENTS.md

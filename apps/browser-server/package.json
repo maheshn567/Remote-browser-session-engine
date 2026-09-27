@@ -1,0 +1,21 @@
+{
+  "name": "browser-server",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun src/main.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "fastify": "^5.11.3",
+    "playwright": "^1.62.1",
+    "werift": "^0.24.4"
+  }
+}
