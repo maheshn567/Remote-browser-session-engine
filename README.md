@@ -6,7 +6,6 @@
 [![Playwright](https://img.shields.io/badge/Playwright-1.62-45BA4B?logo=playwright&logoColor=white)](https://playwright.dev/)
 [![WebRTC](https://img.shields.io/badge/WebRTC-werift-333333?logo=webrtc&logoColor=white)](https://webrtc.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.3-FBF0DF?logo=bun&logoColor=black)](https://bun.sh/)
-[![License](https://img.shields.io/badge/License-MIT-lightgrey)](#license)
 
 <!-- TODO: record a 20-30s demo GIF: Take Control -> log in -> Capture Session -> Test Replay succeeds -->
 <!-- ![Demo](docs/demo.gif) -->
@@ -170,7 +169,3 @@ This is a portfolio-stage project, and these gaps are known rather than accident
 - **Replay verification is a heuristic** — it checks whether the final URL looks like a login page. A real deployment would use a per-site check instead (e.g. an authenticated API call).
 - **Single shared display** — all sessions render to one Xvfb display, so only one live stream is meaningful at a time (the Docker milestone above addresses this).
 - **No automated test suite or CI yet.**
-
-## License
-
-MIT © Mahesh N
