@@ -43,6 +43,20 @@ export function registerSessionRoutes(
     return { success: true, url: targetUrl };
   });
 
+  app.post("/sessions/:id/history", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { action } = request.body as { action: "back" | "forward" | "reload" };
+    const session = sessionManager.get(id);
+    if (!session) return reply.status(404).send({ error: "Session not found" });
+
+    const page = session.getCdp().getActivePage();
+    if (action === "back") await page.goBack().catch(() => null);
+    else if (action === "forward") await page.goForward().catch(() => null);
+    else if (action === "reload") await page.reload().catch(() => null);
+    else return reply.status(400).send({ error: "action must be back, forward or reload" });
+    return { success: true, url: page.url() };
+  });
+
   app.post("/sessions/:id/input", async (request, reply) => {
     const { id } = request.params as { id: string };
     const gateway = getGateway(id);

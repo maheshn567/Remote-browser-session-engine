@@ -1,26 +1,154 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. Every colour in the UI comes from here, so the whole
+ * look can be retuned (or themed) without touching components.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --canvas: #eceae6;
+  --canvas-dot: #d6d3cd;
+  --surface: #ffffff;
+  --surface-sunken: #f6f5f3;
+  --chrome: #dcd9d4;
+  --chrome-tab: #f6f5f3;
+  --chrome-hover: #e7e4e0;
+  --border: #d4d1cb;
+  --border-subtle: #e6e3df;
+  --text: #1c1b19;
+  --text-muted: #6b6862;
+  --text-faint: #9a968f;
+  --accent: #2f5bea;
+  --accent-hover: #2349c9;
+  --accent-soft: #e6ecfd;
+  --accent-fg: #ffffff;
+  --success: #1f8a4c;
+  --success-soft: #e3f3e9;
+  --warning: #b86a00;
+  --warning-soft: #fbefdc;
+  --danger: #c4322b;
+  --danger-soft: #fbe5e3;
+  --light-close: #ff5f57;
+  --light-min: #febc2e;
+  --light-max: #28c840;
+  --shadow-window: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 0 0 1px rgb(0 0 0 / 0.08),
+    0 24px 48px -12px rgb(28 27 25 / 0.28), 0 8px 16px -8px rgb(28 27 25 / 0.12);
+  --shadow-card: 0 0 0 1px rgb(0 0 0 / 0.06), 0 2px 6px -2px rgb(28 27 25 / 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #131312;
+    --canvas-dot: #262523;
+    --surface: #1d1c1b;
+    --surface-sunken: #171716;
+    --chrome: #2a2927;
+    --chrome-tab: #1d1c1b;
+    --chrome-hover: #343230;
+    --border: #3a3836;
+    --border-subtle: #2c2b29;
+    --text: #edebe7;
+    --text-muted: #a29e97;
+    --text-faint: #6f6c66;
+    --accent: #6d8cff;
+    --accent-hover: #8aa3ff;
+    --accent-soft: #232b45;
+    --accent-fg: #0d1020;
+    --success: #4cc584;
+    --success-soft: #17291f;
+    --warning: #f0a53a;
+    --warning-soft: #2e2416;
+    --danger: #f0716a;
+    --danger-soft: #34191a;
+    --shadow-window: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 0 0 1px rgb(0 0 0 / 0.6),
+      0 24px 48px -12px rgb(0 0 0 / 0.6);
+    --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.06), 0 2px 6px -2px rgb(0 0 0 / 0.4);
   }
 }
 
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--surface-sunken);
+  --color-chrome: var(--chrome);
+  --color-chrome-tab: var(--chrome-tab);
+  --color-chrome-hover: var(--chrome-hover);
+  --color-line: var(--border);
+  --color-line-subtle: var(--border-subtle);
+  --color-ink: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --shadow-window: var(--shadow-window);
+  --shadow-card: var(--shadow-card);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--canvas);
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+  background-size: 20px 20px;
+  color: var(--text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Shared control primitives */
+@utility btn {
+  @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-medium transition-colors
+    disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2
+    focus-visible:outline-accent;
+}
+@utility btn-primary {
+  @apply btn bg-accent text-accent-fg hover:bg-accent-hover;
+}
+@utility btn-secondary {
+  @apply btn bg-surface text-ink shadow-card hover:bg-sunken;
+}
+@utility field {
+  @apply h-9 w-full rounded-lg border border-line-subtle bg-sunken px-3 text-sm text-ink placeholder:text-faint
+    focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft;
+}
+@utility chrome-icon-btn {
+  @apply grid size-7 place-items-center rounded-md text-muted transition-colors hover:bg-chrome-hover hover:text-ink
+    disabled:opacity-40 disabled:hover:bg-transparent;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); }
+  100% { box-shadow: 0 0 0 6px transparent; }
+}
+.live-dot {
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+.load-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot,
+  .load-bar::after {
+    animation: none;
+  }
 }

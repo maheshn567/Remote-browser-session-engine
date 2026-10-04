@@ -1,40 +1,33 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { BrowserWindow, type HistoryAction, type TabInfo } from "@/components/BrowserWindow";
+import { SessionPanel, type Controller, type ReplayResult } from "@/components/SessionPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:3001";
 const SESSION_ID = "demo";
-
-interface TabInfo {
-  index: number;
-  title: string;
-  url: string;
-  active: boolean;
-}
+const VIEWPORT = { width: 1440, height: 896 };
 
 export default function BrowserPage() {
-  const [controller, setController] = useState<"AGENT" | "USER">("AGENT");
+  const [controller, setController] = useState<Controller>("AGENT");
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [currentUrl, setCurrentUrl] = useState("https://accounts.google.com");
   const [tabs, setTabs] = useState<TabInfo[]>([]);
 
   const [hasCapturedAuth, setHasCapturedAuth] = useState(false);
   const [capturedAt, setCapturedAt] = useState<string | null>(null);
-  const [replayResult, setReplayResult] = useState<
-    { authenticated: boolean; finalUrl: string } | null
-  >(null);
+  const [replayResult, setReplayResult] = useState<ReplayResult | null>(null);
   const [replayUrl, setReplayUrl] = useState("https://mail.google.com");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const lastMouseMoveRef = useRef<number>(0);
+  // While the user is editing the address bar, tab polling must not overwrite it.
+  const editingUrlRef = useRef(false);
 
   useEffect(() => {
-    setMounted(true);
-
     async function initWebRTC() {
       try {
         const pc = new RTCPeerConnection({ iceServers: [] });
@@ -90,7 +83,7 @@ export default function BrowserPage() {
       if (data.tabs) {
         setTabs(data.tabs);
         const activeTab = data.tabs.find((t: TabInfo) => t.active);
-        if (activeTab) setCurrentUrl(activeTab.url);
+        if (activeTab && !editingUrlRef.current) setCurrentUrl(activeTab.url);
       }
     } catch {}
   }
@@ -112,8 +105,7 @@ export default function BrowserPage() {
     fetchTabs();
   }
 
-  async function closeTab(index: number, e: React.MouseEvent) {
-    e.stopPropagation();
+  async function closeTab(index: number) {
     await fetch(`${API_URL}/sessions/${SESSION_ID}/tabs/close`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -122,7 +114,21 @@ export default function BrowserPage() {
     fetchTabs();
   }
 
-  function sendInput(event: any) {
+  async function navigateHistory(action: HistoryAction) {
+    setLoading(true);
+    try {
+      await fetch(`${API_URL}/sessions/${SESSION_ID}/history`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      }).catch(() => {});
+      fetchTabs();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function sendInput(event: Record<string, unknown>) {
     if (dataChannelRef.current?.readyState === "open") {
       dataChannelRef.current.send(JSON.stringify(event));
     } else {
@@ -138,6 +144,9 @@ export default function BrowserPage() {
     function handleKeyDown(e: KeyboardEvent) {
       if (controller !== "USER") return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Let the local address bar and form fields keep their keystrokes.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       e.preventDefault();
       sendInput({ type: "keypress", key: e.key, code: e.code, text: e.key.length === 1 ? e.key : undefined });
     }
@@ -148,8 +157,8 @@ export default function BrowserPage() {
   function toVideoCoords(e: { clientX: number; clientY: number; currentTarget: HTMLVideoElement }) {
     const rect = e.currentTarget.getBoundingClientRect();
     return {
-      x: Math.round(((e.clientX - rect.left) / rect.width) * 1440),
-      y: Math.round(((e.clientY - rect.top) / rect.height) * 896),
+      x: Math.round(((e.clientX - rect.left) / rect.width) * VIEWPORT.width),
+      y: Math.round(((e.clientY - rect.top) / rect.height) * VIEWPORT.height),
     };
   }
 
@@ -170,13 +179,13 @@ export default function BrowserPage() {
 
   function handleWheel(e: React.WheelEvent<HTMLVideoElement>) {
     if (controller !== "USER") return;
-    const { x, y } = toVideoCoords(e as any);
+    const { x, y } = toVideoCoords(e);
     sendInput({ type: "wheel", x, y, deltaX: e.deltaX, deltaY: e.deltaY });
   }
 
-  async function handleNavigate(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleNavigate() {
     setLoading(true);
+    (document.activeElement as HTMLElement | null)?.blur();
     try {
       await fetch(`${API_URL}/sessions/${SESSION_ID}/navigate`, {
         method: "POST",
@@ -241,168 +250,100 @@ export default function BrowserPage() {
     }
   }
 
-  if (!mounted) return null;
+  const userControlling = controller === "USER";
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center">
-      <div className="w-full max-w-6xl flex flex-col gap-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Remote Browser Preview</h1>
-            <p className="text-sm text-slate-400">
-              Session: <span className="font-mono text-slate-200">{SESSION_ID}</span>
-            </p>
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-20 border-b border-line-subtle bg-canvas/80 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-7 place-items-center rounded-lg bg-ink text-canvas">
+              <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2.2}>
+                <rect x="3" y="4" width="18" height="16" rx="3" />
+                <path d="M3 9h18" />
+                <circle cx="6.5" cy="6.5" r=".5" fill="currentColor" />
+              </svg>
+            </span>
+            <span className="whitespace-nowrap text-sm font-semibold tracking-tight text-ink">Session Engine</span>
+            <span className="hidden text-faint sm:inline">/</span>
+            <span className="hidden rounded-md bg-surface px-2 py-0.5 font-mono text-xs text-muted shadow-card sm:inline">
+              {SESSION_ID}
+            </span>
           </div>
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
-              controller === "USER"
-                ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-            }`}
-          >
-            {controller === "AGENT" ? "🤖 Agent Controlling" : "👤 You Are Controlling"}
-          </span>
-        </div>
-
-        {tabs.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-800/80">
-            {tabs.map((tab) => (
-              <div
-                key={tab.index}
-                onClick={() => switchTab(tab.index)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-xs cursor-pointer border-t border-x transition max-w-[200px] truncate ${
-                  tab.active
-                    ? "bg-slate-900 border-slate-700 text-amber-400 font-semibold"
-                    : "bg-slate-950 border-slate-850 text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
-                }`}
-              >
-                <span className="truncate flex-1">{tab.title || "Tab " + (tab.index + 1)}</span>
-                {tabs.length > 1 && (
-                  <button onClick={(e) => closeTab(tab.index, e)} className="hover:text-red-400 p-0.5 rounded">
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <form onSubmit={handleNavigate} className="flex gap-2">
-          <input
-            type="text"
-            value={currentUrl}
-            onChange={(e) => setCurrentUrl(e.target.value)}
-            placeholder="Enter URL to navigate..."
-            className="flex-1 px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm focus:outline-none focus:border-amber-500/50 text-slate-200"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-semibold text-slate-200 transition"
-          >
-            Go
-          </button>
-        </form>
-
-        <div className="relative w-full rounded-xl overflow-hidden border border-slate-800 bg-black shadow-2xl">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            onClick={handleVideoClick}
-            onMouseMove={handleMouseMove}
-            onWheel={handleWheel}
-            className={`w-full h-auto rounded-xl block transition-all ${
-              controller === "USER" ? "cursor-pointer" : "cursor-not-allowed"
-            }`}
-          />
-          {!connected && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 text-slate-400">
-              ⚡ Connecting WebRTC Stream...
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between bg-slate-900/80 border border-slate-800 p-4 rounded-xl">
-          <div className="text-sm text-slate-400">
-            {controller === "AGENT"
-              ? "Click 'Take Control' to log in yourself, then capture the session below."
-              : "Log in normally, then click 'Give Control Back' when done."}
-          </div>
-          {controller === "AGENT" ? (
-            <button
-              onClick={takeControl}
-              disabled={loading}
-              className="px-5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold transition shadow-md disabled:opacity-50"
-            >
-              Take Control
-            </button>
-          ) : (
-            <button
-              onClick={releaseControl}
-              disabled={loading}
-              className="px-5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold transition shadow-md disabled:opacity-50"
-            >
-              Give Control Back
-            </button>
-          )}
-        </div>
-
-        {/* The actual point: capture the session, then prove it replays with no credentials */}
-        <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-xl flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">
-            Session capture &amp; replay
-          </h2>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={captureAuth}
-              disabled={loading}
-              className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-slate-950 font-semibold text-sm transition disabled:opacity-50"
-            >
-              Capture Session
-            </button>
-            {hasCapturedAuth && (
-              <span className="text-xs text-emerald-400">
-                ✓ Captured{capturedAt ? ` at ${new Date(capturedAt).toLocaleTimeString()}` : ""}
-              </span>
-            )}
-          </div>
-
-          {hasCapturedAuth && (
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
-              <input
-                type="text"
-                value={replayUrl}
-                onChange={(e) => setReplayUrl(e.target.value)}
-                placeholder="URL to test replay against..."
-                className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200"
-              />
-              <button
-                onClick={testReplay}
-                disabled={loading}
-                className="px-4 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-semibold text-slate-100 transition disabled:opacity-50"
-              >
-                Test Replay
-              </button>
-            </div>
-          )}
-
-          {replayResult && (
-            <div
-              className={`text-xs px-3 py-2 rounded-lg ${
-                replayResult.authenticated
-                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                  : "bg-red-500/10 text-red-400 border border-red-500/20"
+          <div className="flex items-center gap-2 text-xs">
+            <span className="hidden items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 text-muted shadow-card sm:inline-flex">
+              <span className={`size-1.5 rounded-full ${connected ? "bg-success" : "bg-faint"}`} />
+              {connected ? "Connected" : "Connecting"}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 font-medium ${
+                userControlling ? "bg-warning-soft text-warning" : "bg-accent-soft text-accent"
               }`}
             >
-              {replayResult.authenticated
-                ? `✓ Replay opened an authenticated session — landed on ${replayResult.finalUrl} with no credentials entered.`
-                : `✗ Replay looked unauthenticated — ended up back at ${replayResult.finalUrl}.`}
-            </div>
-          )}
+              {userControlling ? "You are in control" : "Agent in control"}
+            </span>
+          </div>
         </div>
-      </div>
-    </main>
+      </header>
+
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-8 sm:px-6 lg:py-10">
+        <div className="mb-6">
+          <p className="text-xs font-medium uppercase tracking-wider text-faint">Live preview</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink text-balance">
+            Remote browser session
+          </h1>
+          <p className="mt-1 max-w-xl text-sm text-muted">
+            A real Chromium instance streamed over WebRTC. Sign in, capture the session, then prove it replays
+            without credentials.
+          </p>
+        </div>
+
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <BrowserWindow
+            tabs={tabs}
+            url={currentUrl}
+            loading={loading}
+            interactive={userControlling}
+            connected={connected}
+            viewport={VIEWPORT}
+            onUrlChange={setCurrentUrl}
+            onUrlFocusChange={(focused) => (editingUrlRef.current = focused)}
+            onNavigate={handleNavigate}
+            onHistory={navigateHistory}
+            onSwitchTab={switchTab}
+            onCloseTab={closeTab}
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              onClick={handleVideoClick}
+              onMouseMove={handleMouseMove}
+              onWheel={handleWheel}
+              className={`absolute inset-0 block size-full object-contain ${
+                userControlling ? "cursor-default" : "cursor-not-allowed"
+              }`}
+            />
+          </BrowserWindow>
+
+          <div className="lg:sticky lg:top-20">
+            <SessionPanel
+              controller={controller}
+              busy={loading}
+              hasCapturedAuth={hasCapturedAuth}
+              capturedAt={capturedAt}
+              replayUrl={replayUrl}
+              replayResult={replayResult}
+              onTakeControl={takeControl}
+              onReleaseControl={releaseControl}
+              onCapture={captureAuth}
+              onReplayUrlChange={setReplayUrl}
+              onReplay={testReplay}
+            />
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }
