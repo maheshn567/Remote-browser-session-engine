@@ -35,25 +35,32 @@ export class WebRTCGatewayService {
     console.log("🌐 Received WebRTC SDP Offer from Next.js client...");
 
     try {
-      this.peerConnection = new RTCPeerConnection({
+      // Each offer gets its own local connection. Overlapping offers (e.g.
+      // React StrictMode mounting the page twice) previously shared
+      // this.peerConnection across awaits, so one request could answer with
+      // another request's SDP and the browser never received video.
+      this.peerConnection?.close();
+      const pc = new RTCPeerConnection({
         iceServers: [],
       });
 
       // 3. Create VP8 MediaStreamTrack
-      this.videoTrack = new MediaStreamTrack({
+      const track = new MediaStreamTrack({
         kind: "video",
         codec: {
           mimeType: "video/VP8",
           clockRate: 90000,
           payloadType: 96,
         },
-      });
+      } as any);
+      this.peerConnection = pc;
+      this.videoTrack = track;
 
       // Add track to PeerConnection
-      this.peerConnection.addTrack(this.videoTrack);
+      pc.addTrack(track);
 
       // Setup DataChannel listener
-      this.peerConnection.onDataChannel.subscribe((dc) => {
+      pc.onDataChannel.subscribe((dc) => {
         console.log(`⚡ DataChannel connected: '${dc.label}'`);
         dc.onmessage = (event) => {
           try {
@@ -66,23 +73,23 @@ export class WebRTCGatewayService {
       });
 
       // Set Remote Description (Client Offer)
-      await this.peerConnection.setRemoteDescription({
+      await pc.setRemoteDescription({
         type: "offer",
         sdp: sdpOffer,
       });
 
       // Create Local Answer
-      const answer = await this.peerConnection.createAnswer();
-      await this.peerConnection.setLocalDescription(answer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
 
       // 4. WAIT for ICE Gathering to complete so all candidates are embedded in SDP!
       console.log("⏳ Gathering WebRTC ICE Candidates...");
       await new Promise<void>((resolve) => {
-        if (this.peerConnection?.iceGatheringState === "complete") {
+        if (pc.iceGatheringState === "complete") {
           resolve();
         } else {
-          const subscription = this.peerConnection?.onIceGatheringStateChange.subscribe(
-            (state) => {
+          const subscription = (pc as any).onIceGatheringStateChange.subscribe(
+            (state: string) => {
               if (state === "complete") {
                 subscription?.unsubscribe();
                 resolve();
@@ -92,7 +99,7 @@ export class WebRTCGatewayService {
         }
       });
 
-      const fullAnswerSdp = this.peerConnection.localDescription?.sdp || "";
+      const fullAnswerSdp = pc.localDescription?.sdp || "";
       console.log("✅ WebRTC SDP Answer with complete ICE candidates generated!");
       return fullAnswerSdp;
     } catch (err) {

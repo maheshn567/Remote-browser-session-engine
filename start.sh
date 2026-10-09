@@ -16,6 +16,9 @@ if [[ "${1:-}" == "stop" ]]; then
   echo "Stopping Xvfb and dev servers..."
   pkill -f "Xvfb $DISPLAY_NUM" 2>/dev/null || true
   pkill -f "bun run dev" 2>/dev/null || true
+  pkill -f "bun --watch src/main.ts" 2>/dev/null || true
+  pkill -f "next dev" 2>/dev/null || true
+  pkill -f "x11grab" 2>/dev/null || true
   echo "Done."
   exit 0
 fi
@@ -25,7 +28,7 @@ if pgrep -f "Xvfb $DISPLAY_NUM" > /dev/null; then
   echo "✅ Xvfb already running on $DISPLAY_NUM"
 else
   echo "🖥️  Starting Xvfb on $DISPLAY_NUM..."
-  Xvfb "$DISPLAY_NUM" -screen 0 1440x900x24 &
+  Xvfb "$DISPLAY_NUM" -screen 0 1440x896x24 &
   sleep 1
 fi
 export DISPLAY="$DISPLAY_NUM"

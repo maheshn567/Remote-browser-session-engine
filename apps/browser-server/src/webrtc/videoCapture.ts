@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { config } from "../config.ts";
 
 export class VideoCaptureService {
@@ -9,6 +9,11 @@ export class VideoCaptureService {
       console.log("⚠️ FFmpeg capture is already running.");
       return;
     }
+
+    // `bun --watch` restarts this process in place, which leaves the previous
+    // run's FFmpeg alive and still streaming into the same RTP port. Clear any
+    // such orphan before starting a fresh capture.
+    spawnSync("pkill", ["-f", `x11grab.*rtp://127.0.0.1:${rtpPort}`]);
 
     const { width, height } = config.viewport;
     console.log(`🎥 Starting FFmpeg VP8 capture on ${display}.0 (${width}x${height}) → RTP ${rtpPort}...`);

@@ -28,6 +28,10 @@ export default function BrowserPage() {
   const editingUrlRef = useRef(false);
 
   useEffect(() => {
+    // React StrictMode mounts this effect twice in dev; the first mount is
+    // torn down immediately and must not send its own offer.
+    let cancelled = false;
+
     async function initWebRTC() {
       try {
         const pc = new RTCPeerConnection({ iceServers: [] });
@@ -50,6 +54,7 @@ export default function BrowserPage() {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
+        if (cancelled) return;
         const fullOfferSdp = pc.localDescription?.sdp || offer.sdp;
         const res = await fetch(`${API_URL}/sessions/${SESSION_ID}/webrtc/offer`, {
           method: "POST",
@@ -58,7 +63,7 @@ export default function BrowserPage() {
         });
 
         const data = await res.json();
-        if (data.sdp) {
+        if (data.sdp && !cancelled) {
           await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: data.sdp }));
         }
       } catch (err) {
@@ -71,6 +76,7 @@ export default function BrowserPage() {
     const interval = setInterval(fetchTabs, 2000);
 
     return () => {
+      cancelled = true;
       peerConnectionRef.current?.close();
       clearInterval(interval);
     };
